@@ -2,12 +2,14 @@ pipeline {
     agent any
 
     environment {
-        GIT_REPO    = 'https://github.com/your-username/your-repo.git'  // replace with your repo
+        GIT_REPO    = 'https://github.com/jahnavinnusum/fullstack-s104.git'  
         TOMCAT_URL  = 'http://3.220.86.9:9090/manager/text'
         TOMCAT_USER = 'admin'
-        TOMCAT_PASS = 'admin'
+        TOMCAT_PASS = 'adminadmin'
         PEM_FILE    = '/home/ec2-user/myec2key-.pem'
         EC2_IP      = '3.220.86.9'
+        APP_NAME    = 'springapp1'  // Tomcat context path
+        FRONTEND_DEST = '/var/www/html/'
     }
 
     stages {
@@ -37,12 +39,23 @@ pipeline {
         stage('Deploy Backend to Tomcat') {
             steps {
                 dir('CRUDBack/target') {
-                    sh '''
-                        WAR_FILE=$(ls *.war | head -n 1)
+                    script {
+                        WAR_FILE = sh(
+                            script: "ls *.war | head -n 1",
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (!WAR_FILE) {
+                            error "No WAR file found! Build might have failed."
+                        }
+
                         echo "Deploying $WAR_FILE to Tomcat..."
-                        curl -u ${TOMCAT_USER}:${TOMCAT_PASS} --upload-file $WAR_FILE \
-                        "${TOMCAT_URL}/deploy?path=/springapp1&update=true"
-                    '''
+                        sh """
+                            curl -u ${TOMCAT_USER}:${TOMCAT_PASS} \
+                            --upload-file $WAR_FILE \
+                            "${TOMCAT_URL}/deploy?path=/${APP_NAME}&update=true"
+                        """
+                    }
                 }
             }
         }
@@ -50,12 +63,24 @@ pipeline {
         stage('Deploy Frontend to EC2') {
             steps {
                 dir('CRUDFront/build') {
-                    sh '''
-                        echo "Copying frontend build to EC2..."
-                        scp -o StrictHostKeyChecking=no -i ${PEM_FILE} -r * ec2-user@${EC2_IP}:/var/www/html/
-                    '''
+                    sh """
+                        echo "Cleaning old frontend files..."
+                        ssh -o StrictHostKeyChecking=no -i ${PEM_FILE} ec2-user@${EC2_IP} "rm -rf ${FRONTEND_DEST}*"
+
+                        echo "Copying new frontend build to EC2..."
+                        scp -o StrictHostKeyChecking=no -i ${PEM_FILE} -r * ec2-user@${EC2_IP}:${FRONTEND_DEST}
+                    """
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline completed successfully!"
+        }
+        failure {
+            echo "Pipeline failed. Check logs for details."
         }
     }
 }
