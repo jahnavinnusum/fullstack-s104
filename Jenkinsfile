@@ -1,74 +1,83 @@
 pipeline {
     agent any
 
+    tools {
+        jdk 'JDK_HOME'
+        maven 'MAVEN_HOME'
+    }
+
     environment {
-        GIT_REPO    = 'https://github.com/jahnavinnusum/fullstack-s104.git'  
-        TOMCAT_URL  = 'http://3.220.86.9:9090/manager/text'
+        BACKEND_DIR = 'crud_back'
+        FRONTEND_DIR = 'crud_front'
+
+        TOMCAT_URL = 'http://52.72.120.115:9090/manager/text'
         TOMCAT_USER = 'admin'
-        TOMCAT_PASS = 'adminadmin'
-        PEM_FILE    = '/home/ec2-user/myec2key-.pem'
-        EC2_IP      = '3.220.86.9'
-        APP_NAME    = 'springapp1'  // Tomcat context path
-        FRONTEND_DEST = '/var/www/html/'
+        TOMCAT_PASS = 'admin'
+
+        BACKEND_WAR = 'springapp1.war'
+        FRONTEND_WAR = 'frontapp1.war'
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Clone Repository') {
             steps {
-                git branch: 'main', url: "${GIT_REPO}"
+                git url: 'https://github.com/jahnavinnusum/fullstack-s104.git', branch: 'main'
             }
         }
 
-        stage('Build Backend') {
+        stage('Build Frontend (Vite)') {
             steps {
-                dir('CRUDBack') {
-                    sh 'mvn clean package -DskipTests'
-                }
-            }
-        }
-
-        stage('Build Frontend') {
-            steps {
-                dir('CRUDFront') {
+                dir("${env.FRONTEND_DIR}") {
+                    script {
+                        def nodeHome = tool name: 'NODE_HOME', type: 'jenkins.plugins.nodejs.tools.NodeJSInstallation'
+                        env.PATH = "${nodeHome}/bin:${env.PATH}"
+                    }
                     sh 'npm install'
                     sh 'npm run build'
                 }
             }
         }
 
-        stage('Deploy Backend to Tomcat') {
+        stage('Package Frontend as WAR') {
             steps {
-                dir('CRUDBack/target') {
-                    script {
-                        WAR_FILE = sh(
-                            script: "ls *.war | head -n 1",
-                            returnStdout: true
-                        ).trim()
-                        
-                        if (!WAR_FILE) {
-                            error "No WAR file found! Build might have failed."
-                        }
-
-                        echo "Deploying $WAR_FILE to Tomcat..."
-                        sh """
-                            curl -u ${TOMCAT_USER}:${TOMCAT_PASS} \
-                            --upload-file $WAR_FILE \
-                            "${TOMCAT_URL}/deploy?path=/${APP_NAME}&update=true"
-                        """
-                    }
+                dir("${env.FRONTEND_DIR}") {
+                    sh """
+                        mkdir -p frontapp1_war/WEB-INF
+                        cp -r dist/* frontapp1_war/
+                        jar -cvf ../../${FRONTEND_WAR} -C frontapp1_war .
+                    """
                 }
             }
         }
 
-        stage('Deploy Frontend to EC2') {
+        stage('Build Backend (Spring Boot WAR)') {
             steps {
-                dir('CRUDFront/build') {
-                    sh """
-                        echo "Cleaning old frontend files..."
-                        ssh -o StrictHostKeyChecking=no -i ${PEM_FILE} ec2-user@${EC2_IP} "rm -rf ${FRONTEND_DEST}*"
+                dir("${env.BACKEND_DIR}") {
+                    sh 'mvn clean package'
+                    sh "cp target/*.war ../../${BACKEND_WAR}"
+                }
+            }
+        }
 
-                        echo "Copying new frontend build to EC2..."
-                        scp -o StrictHostKeyChecking=no -i ${PEM_FILE} -r * ec2-user@${EC2_IP}:${FRONTEND_DEST}
+        stage('Deploy Backend to Tomcat (/springapp1)') {
+            steps {
+                script {
+                    sh """
+                        curl -u ${TOMCAT_USER}:${TOMCAT_PASS} \\
+                          --upload-file ${BACKEND_WAR} \\
+                          "${TOMCAT_URL}/deploy?path=/springapp1&update=true"
+                    """
+                }
+            }
+        }
+
+        stage('Deploy Frontend to Tomcat (/frontapp1)') {
+            steps {
+                script {
+                    sh """
+                        curl -u ${TOMCAT_USER}:${TOMCAT_PASS} \\
+                          --upload-file ${FRONTEND_WAR} \\
+                          "${TOMCAT_URL}/deploy?path=/frontapp1&update=true"
                     """
                 }
             }
@@ -77,10 +86,12 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline completed successfully!"
+         
+            echo "✅ Backend deployed: http://52.72.120.115:9090/springapp1"
+            echo "✅ Frontend deployed: http://52.72.120.115:9090/frontapp1"
         }
         failure {
-            echo "Pipeline failed. Check logs for details."
+            echo "❌ Build or deployment failed"
         }
     }
 }
