@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     tools {
-        jdk 'JDK_HOME'
-        maven 'MAVEN_HOME'
+        jdk 'JDK21'        // Use the JDK 21 configured in Jenkins
+        maven 'MAVEN_HOME' // Your Maven tool
     }
 
     environment {
@@ -29,16 +29,12 @@ pipeline {
             steps {
                 dir("${env.FRONTEND_DIR}") {
                     script {
+                        // Setup Node.js environment
                         def nodeHome = tool name: 'NODE_HOME', type: 'jenkins.plugins.nodejs.tools.NodeJSInstallation'
                         env.PATH = "${nodeHome}/bin:${env.PATH}"
                     }
-                    // clean old modules
                     sh 'rm -rf node_modules package-lock.json'
-                    // install fresh deps
                     sh 'npm install --legacy-peer-deps'
-                    // ensure vite is executable
-                    sh 'chmod +x node_modules/.bin/*'
-                    // build frontend
                     sh 'npm run build'
                 }
             }
@@ -51,7 +47,7 @@ pipeline {
                         rm -rf frontapp1_war
                         mkdir -p frontapp1_war/WEB-INF
                         cp -r dist/* frontapp1_war/
-                        jar -cvf ../../${FRONTEND_WAR} -C frontapp1_war .
+                        jar -cvf ../${FRONTEND_WAR} -C frontapp1_war .
                     """
                 }
             }
@@ -61,7 +57,7 @@ pipeline {
             steps {
                 dir("${env.BACKEND_DIR}") {
                     sh 'mvn clean package -DskipTests'
-                    sh "cp target/*.war ../../${BACKEND_WAR}"
+                    sh "cp target/*.war ../${BACKEND_WAR}"
                 }
             }
         }
