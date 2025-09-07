@@ -35,7 +35,7 @@ pipeline {
                     // clean old modules
                     sh 'rm -rf node_modules package-lock.json'
                     // install fresh deps
-                    sh 'npm ci --unsafe-perm'
+                    sh 'npm install --legacy-peer-deps'
                     // ensure vite is executable
                     sh 'chmod +x node_modules/.bin/*'
                     // build frontend
