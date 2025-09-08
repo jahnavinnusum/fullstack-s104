@@ -17,7 +17,6 @@ function App() {
     setProduct({ ...product, [e.target.name]: e.target.value });
   };
 const BASE_URL = 'http://52.72.120.115:9090/springapp1';
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -168,14 +167,14 @@ const BASE_URL = 'http://52.72.120.115:9090/springapp1';
                 >
                   Edit
                 </button>
-                {/*
+                {
                 <button
                   className="btn btn-danger btn-sm"
                   onClick={() => deleteProduct(p.id)}
                 >
                   Delete
                 </button>
-                */}
+                }
               </td>
             </tr>
           ))}
